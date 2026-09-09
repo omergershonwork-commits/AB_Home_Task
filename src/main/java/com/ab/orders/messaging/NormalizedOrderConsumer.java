@@ -2,6 +2,7 @@ package com.ab.orders.messaging;
 
 import com.ab.orders.domain.CanonicalOrder;
 import com.ab.orders.domain.ProcessedOrder;
+import com.ab.orders.persistence.FailedOrderPersistenceException;
 import com.ab.orders.persistence.TargetOrder;
 import com.ab.orders.persistence.TargetOrderSink;
 import com.ab.orders.processing.OrderProcessor;
@@ -39,9 +40,7 @@ public class NormalizedOrderConsumer {
             } catch (Exception exception) {
                 // Records before the failed index may be committed by the Kafka error handler,
                 // so persist that successful prefix before identifying the failed record.
-                if (!successfulOrders.isEmpty()) {
-                    targetOrderSink.saveAll(successfulOrders);
-                }
+                persistOrReportDatabaseFailure(successfulOrders);
 
                 throw new BatchListenerFailedException(
                         "Failed to process normalized order at batch index " + i,
@@ -51,8 +50,24 @@ public class NormalizedOrderConsumer {
             }
         }
 
-        if (!successfulOrders.isEmpty()) {
-            targetOrderSink.saveAll(successfulOrders);
+        persistOrReportDatabaseFailure(successfulOrders);
+    }
+
+    private void persistOrReportDatabaseFailure(List<TargetOrder> orders) {
+        if (orders.isEmpty()) {
+            return;
+        }
+
+        try {
+            targetOrderSink.saveAll(orders);
+        } catch (FailedOrderPersistenceException exception) {
+            // The persistence list is always the contiguous prefix of this Kafka batch,
+            // so the persistence index maps directly to the Kafka batch index.
+            throw new BatchListenerFailedException(
+                    "Database rejected normalized order at batch index " + exception.failedIndex(),
+                    exception,
+                    exception.failedIndex()
+            );
         }
     }
 }
