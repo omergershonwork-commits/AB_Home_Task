@@ -25,6 +25,7 @@ spring:
       group-id: order-processing
       auto-offset-reset: earliest
       enable-auto-commit: false
+      max-poll-records: ${KAFKA_MAX_POLL_RECORDS:500}
     producer:
       acks: all
 
@@ -46,3 +47,6 @@ app:
       source-a-dlq: orders.source-a.dlq
       source-b-dlq: orders.source-b.dlq
       normalized-dlq: orders.normalized.dlq
+
+  persistence:
+    batch-size: ${DB_BATCH_SIZE:100}
