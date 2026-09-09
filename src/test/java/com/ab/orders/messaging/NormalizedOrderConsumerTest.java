@@ -9,12 +9,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.kafka.listener.BatchListenerFailedException;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
@@ -27,10 +29,54 @@ class NormalizedOrderConsumerTest {
             .registerModule(new JavaTimeModule());
 
     @Test
-    void processesAndPersistsNormalizedOrdersAsBatch() throws Exception {
+    void processesAndPersistsNormalizedOrdersAsBatch() {
         OrderProcessor processor = mock(OrderProcessor.class);
         TargetOrderSink sink = mock(TargetOrderSink.class);
-        ProcessedOrder processedOrder = new ProcessedOrder(
+        ProcessedOrder processedOrder = processedOrder();
+        when(processor.process(any(CanonicalOrder.class))).thenReturn(processedOrder);
+
+        NormalizedOrderConsumer consumer = new NormalizedOrderConsumer(objectMapper, processor, sink);
+
+        String payload = validPayload();
+        consumer.consume(List.of(payload, payload));
+
+        verify(processor, times(2)).process(any(CanonicalOrder.class));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TargetOrder>> captor = ArgumentCaptor.forClass(List.class);
+        verify(sink).saveAll(captor.capture());
+
+        assertThat(captor.getValue()).hasSize(2);
+        assertThat(captor.getValue().getFirst().sourceSystem()).isEqualTo("SOURCE_A");
+        assertThat(captor.getValue().getFirst().order().orderReference()).isEqualTo("ORD-10001");
+    }
+
+    @Test
+    void persistsSuccessfulPrefixAndIdentifiesFailedRecord() {
+        OrderProcessor processor = mock(OrderProcessor.class);
+        TargetOrderSink sink = mock(TargetOrderSink.class);
+        when(processor.process(any(CanonicalOrder.class))).thenReturn(processedOrder());
+
+        NormalizedOrderConsumer consumer = new NormalizedOrderConsumer(objectMapper, processor, sink);
+
+        BatchListenerFailedException exception = catchThrowableOfType(
+                () -> consumer.consume(List.of(validPayload(), "not-valid-json", validPayload())),
+                BatchListenerFailedException.class
+        );
+
+        assertThat(exception.getIndex()).isEqualTo(1);
+        verify(processor, times(1)).process(any(CanonicalOrder.class));
+
+        @SuppressWarnings("unchecked")
+        ArgumentCaptor<List<TargetOrder>> captor = ArgumentCaptor.forClass(List.class);
+        verify(sink).saveAll(captor.capture());
+
+        assertThat(captor.getValue()).hasSize(1);
+        assertThat(captor.getValue().getFirst().order().orderReference()).isEqualTo("ORD-10001");
+    }
+
+    private ProcessedOrder processedOrder() {
+        return new ProcessedOrder(
                 "ORD-10001",
                 new ProcessedOrder.Customer("CUST-501", "John Smith", "United States"),
                 LocalDateTime.parse("2026-09-01T10:30:00"),
@@ -38,11 +84,10 @@ class NormalizedOrderConsumerTest {
                 new BigDecimal("251.00"),
                 "USD"
         );
-        when(processor.process(any(CanonicalOrder.class))).thenReturn(processedOrder);
+    }
 
-        NormalizedOrderConsumer consumer = new NormalizedOrderConsumer(objectMapper, processor, sink);
-
-        String payload = """
+    private String validPayload() {
+        return """
                 {
                   "sourceSystem": "SOURCE_A",
                   "orderReference": "ORD-10001",
@@ -55,17 +100,5 @@ class NormalizedOrderConsumerTest {
                   "unitPrice": 125.50
                 }
                 """;
-
-        consumer.consume(List.of(payload, payload));
-
-        verify(processor, times(2)).process(any(CanonicalOrder.class));
-
-        @SuppressWarnings("unchecked")
-        ArgumentCaptor<List<TargetOrder>> captor = ArgumentCaptor.forClass(List.class);
-        verify(sink).saveAll(captor.capture());
-
-        assertThat(captor.getValue()).hasSize(2);
-        assertThat(captor.getValue().getFirst().sourceSystem()).isEqualTo("SOURCE_A");
-        assertThat(captor.getValue().getFirst().order().orderReference()).isEqualTo("ORD-10001");
     }
 }
