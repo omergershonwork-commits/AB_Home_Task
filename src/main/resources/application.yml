@@ -2,6 +2,9 @@ spring:
   application:
     name: ab-order-processing
 
+  config:
+    import: classpath:country-reference.yml
+
   datasource:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/order_processing}
     username: ${DB_USER:order_app}
@@ -39,15 +42,3 @@ app:
       source-a-dlq: orders.source-a.dlq
       source-b-dlq: orders.source-b.dlq
       normalized-dlq: orders.normalized.dlq
-
-reference-data:
-  countries:
-    US:
-      name: United States
-      currency: USD
-    GB:
-      name: United Kingdom
-      currency: GBP
-    DE:
-      name: Germany
-      currency: EUR
