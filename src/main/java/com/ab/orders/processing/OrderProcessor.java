@@ -3,19 +3,17 @@ package com.ab.orders.processing;
 import com.ab.orders.domain.CanonicalOrder;
 import com.ab.orders.domain.CountryInfo;
 import com.ab.orders.domain.ProcessedOrder;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 
 /** Validates a canonical order, enriches it, and calculates its final total value. */
 @Component
+@RequiredArgsConstructor
 public class OrderProcessor {
 
     private final CountryResolver countryResolver;
-
-    public OrderProcessor(CountryResolver countryResolver) {
-        this.countryResolver = countryResolver;
-    }
 
     public ProcessedOrder process(CanonicalOrder order) {
         validate(order);
