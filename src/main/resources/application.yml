@@ -10,6 +10,10 @@ spring:
     username: ${DB_USER:order_app}
     password: ${DB_PASSWORD:order_app}
 
+  sql:
+    init:
+      mode: always
+
   jpa:
     hibernate:
       ddl-auto: none
