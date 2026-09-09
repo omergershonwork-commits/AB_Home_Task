@@ -1,6 +1,7 @@
 package com.ab.orders.processing;
 
 import com.ab.orders.config.CountryProperties;
+import com.ab.orders.domain.CountryInfo;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -28,19 +29,12 @@ class ConfigurationCountryResolverTest {
     }
 
     private ConfigurationCountryResolver resolver() {
-        CountryProperties.Country us = country("United States", "USD");
-        CountryProperties.Country gb = country("United Kingdom", "GBP");
-        CountryProperties.Country de = country("Germany", "EUR");
-
         CountryProperties properties = new CountryProperties();
-        properties.setCountries(Map.of("US", us, "GB", gb, "DE", de));
+        properties.setCountries(Map.of(
+                "US", new CountryInfo("United States", "USD"),
+                "GB", new CountryInfo("United Kingdom", "GBP"),
+                "DE", new CountryInfo("Germany", "EUR")
+        ));
         return new ConfigurationCountryResolver(properties);
-    }
-
-    private CountryProperties.Country country(String name, String currency) {
-        CountryProperties.Country country = new CountryProperties.Country();
-        country.setName(name);
-        country.setCurrency(currency);
-        return country;
     }
 }
