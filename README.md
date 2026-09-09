@@ -17,8 +17,13 @@ Kafka is the ingestion boundary. No source REST API is implemented.
 - `orders.source-a.raw` - 3 partitions
 - `orders.source-b.raw` - 3 partitions
 - `orders.normalized` - 6 partitions
+- `orders.source-a.dlq` - 3 partitions
+- `orders.source-b.dlq` - 3 partitions
+- `orders.normalized.dlq` - 6 partitions
 
 The normalized topic is a separate scaling boundary so normalization and common order processing can scale independently.
+
+DLQ topics are provisioned now as infrastructure. The consumer error-handling logic that routes failed records to them will be added together with the consumers in the next stages.
 
 ## Prerequisites
 
@@ -50,7 +55,10 @@ Expected application topics:
 
 ```text
 orders.normalized
+orders.normalized.dlq
+orders.source-a.dlq
 orders.source-a.raw
+orders.source-b.dlq
 orders.source-b.raw
 ```
 
