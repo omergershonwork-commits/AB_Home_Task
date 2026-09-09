@@ -1,0 +1,11 @@
+reference-data:
+  countries:
+    US:
+      name: United States
+      currency: USD
+    GB:
+      name: United Kingdom
+      currency: GBP
+    DE:
+      name: Germany
+      currency: EUR
