@@ -18,6 +18,7 @@ public class KafkaErrorConfig {
             KafkaTemplate<String, String> kafkaTemplate,
             @Value("${app.kafka.topics.source-a-raw}") String sourceATopic,
             @Value("${app.kafka.topics.source-b-raw}") String sourceBTopic,
+            @Value("${app.kafka.topics.normalized}") String normalizedTopic,
             @Value("${app.kafka.topics.source-a-dlq}") String sourceADlq,
             @Value("${app.kafka.topics.source-b-dlq}") String sourceBDlq,
             @Value("${app.kafka.topics.normalized-dlq}") String normalizedDlq
@@ -25,7 +26,7 @@ public class KafkaErrorConfig {
         DeadLetterPublishingRecoverer recoverer = new DeadLetterPublishingRecoverer(
                 kafkaTemplate,
                 (record, exception) -> new TopicPartition(
-                        resolveDlq(record.topic(), sourceATopic, sourceBTopic, sourceADlq, sourceBDlq, normalizedDlq),
+                        resolveDlq(record.topic(), sourceATopic, sourceBTopic, normalizedTopic, sourceADlq, sourceBDlq, normalizedDlq),
                         record.partition()
                 )
         );
@@ -37,6 +38,7 @@ public class KafkaErrorConfig {
             String topic,
             String sourceATopic,
             String sourceBTopic,
+            String normalizedTopic,
             String sourceADlq,
             String sourceBDlq,
             String normalizedDlq
@@ -47,6 +49,9 @@ public class KafkaErrorConfig {
         if (topic.equals(sourceBTopic)) {
             return sourceBDlq;
         }
-        return normalizedDlq;
+        if (topic.equals(normalizedTopic)) {
+            return normalizedDlq;
+        }
+        throw new IllegalArgumentException("No DLQ configured for topic: " + topic);
     }
 }
