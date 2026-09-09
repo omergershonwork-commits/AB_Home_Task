@@ -8,6 +8,7 @@ import com.ab.orders.processing.OrderProcessor;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.kafka.annotation.KafkaListener;
+import org.springframework.kafka.listener.BatchListenerFailedException;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -27,15 +28,31 @@ public class NormalizedOrderConsumer {
             groupId = "normalized-order-processor",
             containerFactory = "batchKafkaListenerContainerFactory"
     )
-    public void consume(List<String> payloads) throws Exception {
-        List<TargetOrder> orders = new ArrayList<>(payloads.size());
+    public void consume(List<String> payloads) {
+        List<TargetOrder> successfulOrders = new ArrayList<>(payloads.size());
 
-        for (String payload : payloads) {
-            CanonicalOrder canonicalOrder = objectMapper.readValue(payload, CanonicalOrder.class);
-            ProcessedOrder processedOrder = orderProcessor.process(canonicalOrder);
-            orders.add(new TargetOrder(canonicalOrder.sourceSystem(), processedOrder));
+        for (int i = 0; i < payloads.size(); i++) {
+            try {
+                CanonicalOrder canonicalOrder = objectMapper.readValue(payloads.get(i), CanonicalOrder.class);
+                ProcessedOrder processedOrder = orderProcessor.process(canonicalOrder);
+                successfulOrders.add(new TargetOrder(canonicalOrder.sourceSystem(), processedOrder));
+            } catch (Exception exception) {
+                // Records before the failed index may be committed by the Kafka error handler,
+                // so persist that successful prefix before identifying the failed record.
+                if (!successfulOrders.isEmpty()) {
+                    targetOrderSink.saveAll(successfulOrders);
+                }
+
+                throw new BatchListenerFailedException(
+                        "Failed to process normalized order at batch index " + i,
+                        exception,
+                        i
+                );
+            }
         }
 
-        targetOrderSink.saveAll(orders);
+        if (!successfulOrders.isEmpty()) {
+            targetOrderSink.saveAll(successfulOrders);
+        }
     }
 }
