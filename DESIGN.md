@@ -49,4 +49,11 @@ Direct processing without `orders.normalized` would be simpler but would couple 
 A generic source consumer, Redis country lookup, JSONB-only storage, and a custom timed micro-batch buffer were rejected because they add complexity without enough value for this task.
 
 ## Production
-For production I would consider Schema Registry, Flyway/Liquibase, stronger observability, security, longer backoff for infrastructure failures, DLQ replay tooling, timezone clarification, and tuning partitions/batch sizes from measured load.
+For a production version I would focus on the parts that affect this flow directly:
+- scale consumers horizontally according to Kafka partitions and actual consumer lag;
+- tune `KAFKA_MAX_POLL_RECORDS`, `DB_BATCH_SIZE`, consumer concurrency, and the DB connection pool from measured load;
+- monitor Kafka lag, processing latency, retry/DLQ rates, DB latency/errors, and JVM CPU/memory;
+- treat PostgreSQL as a possible bottleneck and tune batching, indexes, transaction size, connection limits, and storage accordingly;
+- use longer/backoff-based retries for temporary infrastructure failures while keeping deterministic bad records in DLQ;
+- version Kafka message contracts if source schemas evolve, for example with Schema Registry/Avro/Protobuf;
+- if more source systems are added, add a new DTO/topic/normalizer while keeping the shared `CanonicalOrder` and processor unchanged.
