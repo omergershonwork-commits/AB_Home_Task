@@ -2,6 +2,7 @@ package com.ab.orders.messaging;
 
 import com.ab.orders.domain.CanonicalOrder;
 import com.ab.orders.domain.ProcessedOrder;
+import com.ab.orders.persistence.FailedOrderPersistenceException;
 import com.ab.orders.persistence.TargetOrder;
 import com.ab.orders.persistence.TargetOrderSink;
 import com.ab.orders.processing.OrderProcessor;
@@ -18,6 +19,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.catchThrowableOfType;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -73,6 +76,26 @@ class NormalizedOrderConsumerTest {
 
         assertThat(captor.getValue()).hasSize(1);
         assertThat(captor.getValue().getFirst().order().orderReference()).isEqualTo("ORD-10001");
+    }
+
+    @Test
+    void mapsIsolatedDatabaseFailureBackToKafkaBatchIndex() {
+        OrderProcessor processor = mock(OrderProcessor.class);
+        TargetOrderSink sink = mock(TargetOrderSink.class);
+        when(processor.process(any(CanonicalOrder.class))).thenReturn(processedOrder());
+        doThrow(new FailedOrderPersistenceException(1, new RuntimeException("constraint violation")))
+                .when(sink).saveAll(anyList());
+
+        NormalizedOrderConsumer consumer = new NormalizedOrderConsumer(objectMapper, processor, sink);
+
+        BatchListenerFailedException exception = catchThrowableOfType(
+                () -> consumer.consume(List.of(validPayload(), validPayload(), validPayload())),
+                BatchListenerFailedException.class
+        );
+
+        assertThat(exception.getIndex()).isEqualTo(1);
+        verify(processor, times(3)).process(any(CanonicalOrder.class));
+        verify(sink).saveAll(anyList());
     }
 
     private ProcessedOrder processedOrder() {
