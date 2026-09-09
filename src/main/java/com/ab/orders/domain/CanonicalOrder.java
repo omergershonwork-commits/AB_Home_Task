@@ -3,6 +3,7 @@ package com.ab.orders.domain;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+/** Represents the normalized order shape shared by all source systems. */
 public record CanonicalOrder(
         String sourceSystem,
         String orderReference,
