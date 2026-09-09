@@ -1,103 +1,70 @@
 # AB Home Task - Multi-Source Order Processing
 
-Stage 1 contains the application and infrastructure foundation only. Business processing will be added in the next stages.
+Java/Spring Boot service that receives two order schemas from Kafka, normalizes them, applies shared business logic, and stores the final result in PostgreSQL.
 
 ## Stack
+Java 21, Spring Boot 3.5.6, Spring Kafka, PostgreSQL 16, Maven, Docker Compose.
 
-- Java 21
-- Spring Boot 3.5.6
-- Spring Kafka
-- PostgreSQL 16
-- Docker Compose
-
-Kafka is the ingestion boundary. No source REST API is implemented.
-
-## Kafka topics
-
-- `orders.source-a.raw` - 3 partitions
-- `orders.source-b.raw` - 3 partitions
-- `orders.normalized` - 6 partitions
-- `orders.source-a.dlq` - 3 partitions
-- `orders.source-b.dlq` - 3 partitions
-- `orders.normalized.dlq` - 6 partitions
-
-The normalized topic is a separate scaling boundary so normalization and common order processing can scale independently.
-
-DLQ topics are provisioned now as infrastructure. The consumer error-handling logic that routes failed records to them will be added together with the consumers in the next stages.
-
-## Prerequisites
-
-- Java 21+
-- Maven 3.9+
-- Docker Desktop / Docker Compose
-
-## Run Stage 1
-
-Start Kafka and PostgreSQL:
-
-```bash
-docker compose up -d
-```
-
-Check the containers:
-
-```bash
-docker compose ps -a
-```
-
-`kafka` and `postgres` should be healthy. `kafka-init` is a one-shot setup container and should finish with `Exited (0)` after creating the topics.
-
-Verify the Kafka topics:
-
-```bash
-docker compose exec kafka /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list
-```
-
-Expected application topics:
-
+## Flow
 ```text
-orders.normalized
-orders.normalized.dlq
-orders.source-a.dlq
-orders.source-a.raw
-orders.source-b.dlq
-orders.source-b.raw
+Source A -> orders.source-a.raw -> normalize --\
+                                           -> orders.normalized -> process -> PostgreSQL
+Source B -> orders.source-b.raw -> normalize --/
 ```
 
-Verify PostgreSQL:
-
-```bash
-docker compose exec postgres psql -U order_app -d order_processing -c "SELECT 1;"
-```
-
-Run the Spring Boot application from the repository root:
-
-```bash
+## Run
+```powershell
+mvn test
+docker compose up -d
 mvn spring-boot:run
 ```
 
-Verify application health:
-
-```bash
-curl http://localhost:8080/actuator/health
-```
-
-On PowerShell you can also use:
-
+Health check:
 ```powershell
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
-The health response should report `UP`. PostgreSQL appears through the Actuator `db` health component. Kafka connectivity is verified separately with the Kafka CLI command above; plain Spring Kafka does not add a Kafka health component to Actuator by default.
-
-Stop the infrastructure:
-
-```bash
-docker compose down
+## Test Source A
+```powershell
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic orders.source-a.raw
+```
+Paste:
+```json
+{"orderId":"ORD-A-1","customerId":"CUST-501","customerName":"John Smith","country":"US","orderDate":"2026-09-01T10:30:00","productCode":"P100","quantity":2,"unitPrice":125.50}
 ```
 
-To also remove the local PostgreSQL data volume:
-
-```bash
-docker compose down -v
+## Test Source B
+```powershell
+docker compose exec -i kafka /opt/kafka/bin/kafka-console-producer.sh --bootstrap-server kafka:9092 --topic orders.source-b.raw
 ```
+Paste:
+```json
+{"order_number":"ORD-B-1","customer":{"id":"CUST-842","first_name":"Jane","last_name":"Miller","country_code":"DE"},"created_at":"2026-09-01T11:15:00","item":{"sku":"P200","units":3,"price":80.00}}
+```
+
+## View Output
+```powershell
+docker compose exec postgres psql -U order_app -d order_processing -c "SELECT source_system, order_reference, customer_full_name, country, currency, total_order_value FROM processed_orders ORDER BY id DESC;"
+```
+
+Expected examples:
+```text
+SOURCE_A | ORD-A-1 | John Smith  | United States | USD | 251.00
+SOURCE_B | ORD-B-1 | Jane Miller | Germany       | EUR | 240.00
+```
+
+## Failure Handling
+Invalid source records go to the source DLQ. Deterministic database row failures are isolated and sent to `orders.normalized.dlq`. Transient database failures are retried.
+
+Database writes are idempotent using `UNIQUE (source_system, order_reference)` and `ON CONFLICT DO NOTHING`.
+
+## Batch Configuration
+Defaults: Kafka poll max `500`, JDBC batch size `100`.
+
+Override with:
+```powershell
+$env:KAFKA_MAX_POLL_RECORDS="200"
+$env:DB_BATCH_SIZE="50"
+```
+
+See `DESIGN.md` for design decisions and `AI_USAGE.md` for AI usage.
