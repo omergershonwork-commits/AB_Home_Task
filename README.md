@@ -42,8 +42,10 @@ docker compose up -d
 Check the containers:
 
 ```bash
-docker compose ps
+docker compose ps -a
 ```
+
+`kafka` and `postgres` should be healthy. `kafka-init` is a one-shot setup container and should finish with `Exited (0)` after creating the topics.
 
 Verify the Kafka topics:
 
@@ -86,7 +88,7 @@ On PowerShell you can also use:
 Invoke-RestMethod http://localhost:8080/actuator/health
 ```
 
-The health response should report `UP`, including PostgreSQL and Kafka connectivity.
+The health response should report `UP`. PostgreSQL appears through the Actuator `db` health component. Kafka connectivity is verified separately with the Kafka CLI command above; plain Spring Kafka does not add a Kafka health component to Actuator by default.
 
 Stop the infrastructure:
 
