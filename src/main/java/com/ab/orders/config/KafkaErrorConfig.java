@@ -1,5 +1,6 @@
 package com.ab.orders.config;
 
+import com.ab.orders.persistence.FailedOrderPersistenceException;
 import org.apache.kafka.common.TopicPartition;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -9,7 +10,7 @@ import org.springframework.kafka.listener.DeadLetterPublishingRecoverer;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
-/** Retries failed Kafka records briefly and then routes the original record to the matching DLQ. */
+/** Retries transient Kafka failures and routes exhausted or non-retryable records to the matching DLQ. */
 @Configuration
 public class KafkaErrorConfig {
 
@@ -31,7 +32,17 @@ public class KafkaErrorConfig {
                 )
         );
 
-        return new DefaultErrorHandler(recoverer, new FixedBackOff(500L, 2L));
+        DefaultErrorHandler errorHandler = new DefaultErrorHandler(
+                recoverer,
+                new FixedBackOff(500L, 2L)
+        );
+
+        // PostgresOrderSink throws this only after a deterministic DB data/constraint failure
+        // has been narrowed down to one exact order. Retrying the same record cannot fix its data,
+        // so recover it immediately to the DLQ and continue with the remaining Kafka records.
+        errorHandler.addNotRetryableExceptions(FailedOrderPersistenceException.class);
+
+        return errorHandler;
     }
 
     private String resolveDlq(
