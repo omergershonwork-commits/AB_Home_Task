@@ -1,0 +1,38 @@
+spring:
+  application:
+    name: ab-order-processing
+
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/order_processing}
+    username: ${DB_USER:order_app}
+    password: ${DB_PASSWORD:order_app}
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
+    consumer:
+      group-id: order-processing
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    producer:
+      acks: all
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+app:
+  kafka:
+    topics:
+      source-a-raw: orders.source-a.raw
+      source-b-raw: orders.source-b.raw
+      normalized: orders.normalized
