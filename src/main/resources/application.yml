@@ -10,14 +10,14 @@ spring:
     username: ${DB_USER:order_app}
     password: ${DB_PASSWORD:order_app}
 
-  sql:
-    init:
-      mode: always
-
   jpa:
     hibernate:
       ddl-auto: none
     open-in-view: false
+
+  sql:
+    init:
+      mode: always
 
   kafka:
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:29092}
@@ -47,6 +47,5 @@ app:
       source-a-dlq: orders.source-a.dlq
       source-b-dlq: orders.source-b.dlq
       normalized-dlq: orders.normalized.dlq
-
   persistence:
     batch-size: ${DB_BATCH_SIZE:100}
