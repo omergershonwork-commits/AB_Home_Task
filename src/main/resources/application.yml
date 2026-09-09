@@ -36,3 +36,6 @@ app:
       source-a-raw: orders.source-a.raw
       source-b-raw: orders.source-b.raw
       normalized: orders.normalized
+      source-a-dlq: orders.source-a.dlq
+      source-b-dlq: orders.source-b.dlq
+      normalized-dlq: orders.normalized.dlq
