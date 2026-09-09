@@ -21,6 +21,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.catchThrowableOfType;
 
 class PostgresOrderSinkTest {
 
@@ -30,16 +31,17 @@ class PostgresOrderSinkTest {
         PostgresOrderSink sink = new PostgresOrderSink(jdbcTemplate, new TestTransactionManager());
         ReflectionTestUtils.setField(sink, "batchSize", 4);
 
-        assertThatThrownBy(() -> sink.saveAll(List.of(
-                targetOrder("ORD-0"),
-                targetOrder("ORD-1"),
-                targetOrder("ORD-2"),
-                targetOrder("ORD-3")
-        )))
-                .isInstanceOf(FailedOrderPersistenceException.class)
-                .extracting(exception -> ((FailedOrderPersistenceException) exception).failedIndex())
-                .isEqualTo(2);
+        FailedOrderPersistenceException exception = catchThrowableOfType(
+                () -> sink.saveAll(List.of(
+                        targetOrder("ORD-0"),
+                        targetOrder("ORD-1"),
+                        targetOrder("ORD-2"),
+                        targetOrder("ORD-3")
+                )),
+                FailedOrderPersistenceException.class
+        );
 
+        assertThat(exception.failedIndex()).isEqualTo(2);
         assertThat(jdbcTemplate.attempts()).containsExactly(
                 List.of("ORD-0", "ORD-1", "ORD-2", "ORD-3"),
                 List.of("ORD-0", "ORD-1"),
